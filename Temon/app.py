@@ -29,7 +29,6 @@ _REQUEST_LOG: list = []
 _MAX_REQUESTS_PER_MINUTE = 30
 
 def _rate_check():
-    """Simples rate-limiter em memória para chamadas externas."""
     now = time.time()
     global _REQUEST_LOG
     _REQUEST_LOG = [t for t in _REQUEST_LOG if now - t < 60]
@@ -39,7 +38,6 @@ def _rate_check():
     return True
 
 def _sanitize(text: str) -> str:
-    """Remove caracteres potencialmente perigosos de inputs do usuário."""
     return re.sub(r"[<>\"';&]", "", str(text))[:500]
 
 # ─── Tema ───────────────────────────────────────────────────────────────────────
@@ -47,8 +45,8 @@ COLORS = {
     "bg_dark":      "#0B0F1A",
     "bg_card":      "#111827",
     "bg_card2":     "#161D2E",
-    "accent":       "#C8A850",   # ouro escuro — remete a solidez e engenharia
-    "accent2":      "#3B7DD8",   # azul técnico
+    "accent":       "#C8A850",
+    "accent2":      "#3B7DD8",
     "positive":     "#2ECC71",
     "negative":     "#E74C3C",
     "neutral":      "#95A5A6",
@@ -78,15 +76,37 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
-html, body, [class*="css"] {
+/* ── FIX: force dark background on all Streamlit containers ── */
+html, body {
+    background-color: #0B0F1A !important;
+    color: #F0F2F5 !important;
+}
+.stApp,
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+[data-testid="stMainBlockContainer"],
+.main,
+.block-container,
+.stMainBlockContainer,
+section.main > div {
+    background-color: #0B0F1A !important;
+    color: #F0F2F5 !important;
+}
+/* catch any remaining white panels */
+[class*="css"] {
     font-family: 'Inter', sans-serif;
-    background-color: #0B0F1A;
-    color: #F0F2F5;
+}
+/* Streamlit's inner page wrapper */
+.appview-container,
+.appview-container > section,
+.appview-container .main .block-container {
+    background-color: #0B0F1A !important;
 }
 
 /* Sidebar */
-section[data-testid="stSidebar"] {
-    background-color: #0D1321;
+section[data-testid="stSidebar"],
+section[data-testid="stSidebar"] > div {
+    background-color: #0D1321 !important;
     border-right: 1px solid #1F2937;
 }
 section[data-testid="stSidebar"] .block-container { padding-top: 1rem; }
@@ -216,17 +236,24 @@ div[data-testid="metric-container"] {
     border-radius: 6px;
     padding: 0.8rem;
 }
+/* Input widgets dark background */
+.stTextInput > div > div > input,
+.stNumberInput > div > div > input,
+.stSelectbox > div > div,
+div[data-baseweb="select"] > div {
+    background-color: #161D2E !important;
+    color: #F0F2F5 !important;
+    border-color: #1F2937 !important;
+}
+/* Slider track */
+.stSlider > div { color: #F0F2F5; }
 </style>
 """, unsafe_allow_html=True)
 
-# ─── Funções de dados (com caching robusto) ────────────────────────────────────
+# ─── Funções de dados ──────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_bcb_series(series_code: int, n_last: int = 60) -> pd.DataFrame:
-    """
-    Busca séries temporais do Banco Central do Brasil (SGS/BCB).
-    Sem chave de API necessária — endpoint público.
-    """
     if not _rate_check():
         return pd.DataFrame()
     url = (
@@ -246,10 +273,6 @@ def fetch_bcb_series(series_code: int, n_last: int = 60) -> pd.DataFrame:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_ibge_sinapi() -> pd.DataFrame:
-    """
-    Retorna custo médio da construção civil m² (SINAPI) via IBGE SIDRA — tabela 3895.
-    Fallback: dados curados de boletins IBGE/CBIC caso a API esteja indisponível.
-    """
     if not _rate_check():
         return _sinapi_fallback()
     url = (
@@ -271,10 +294,6 @@ def fetch_ibge_sinapi() -> pd.DataFrame:
 
 
 def _sinapi_fallback() -> pd.DataFrame:
-    """
-    Dados verificados de boletins públicos IBGE/SINAPI (dez/2024 = R$1.790,66 m²,
-    dez/2025 = R$1.891,63 m²).
-    """
     records = [
         ("2020-01", 1185.82), ("2020-06", 1202.14), ("2020-12", 1294.38),
         ("2021-06", 1478.90), ("2021-12", 1550.12), ("2022-06", 1600.45),
@@ -289,10 +308,6 @@ def _sinapi_fallback() -> pd.DataFrame:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_incc_history() -> pd.DataFrame:
-    """
-    INCC-DI (FGV): variação acumulada anual.
-    Fonte: FGV/IBRE, IBGE/SINAPI boletins 2024-2025.
-    """
     records = [
         (2018, 4.72), (2019, 3.89), (2020, 10.76), (2021, 17.56),
         (2022, 8.50), (2023, 3.66), (2024, 3.98), (2025, 5.63),
@@ -304,10 +319,6 @@ def fetch_incc_history() -> pd.DataFrame:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_pib_construcao() -> pd.DataFrame:
-    """
-    PIB da Construção Civil (variação anual %).
-    Fonte: IBGE/SCN + CBIC boletins trimestrais 2024-2025.
-    """
     records = [
         (2015, -7.4), (2016, -5.2), (2017, -0.2), (2018, 2.5),
         (2019, 1.6), (2020, 2.5), (2021, 9.7), (2022, 6.9),
@@ -323,10 +334,6 @@ def fetch_pib_construcao() -> pd.DataFrame:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_emprego_construcao() -> pd.DataFrame:
-    """
-    Emprego formal na construção civil.
-    Fonte: CAGED/MTE apud CBIC (2024: 2,978 mi; 2025: >3 mi).
-    """
     records = [
         (2018, 1820), (2019, 1950), (2020, 1980), (2021, 2350),
         (2022, 2680), (2023, 2840), (2024, 2978), (2025, 3050),
@@ -338,10 +345,8 @@ def fetch_emprego_construcao() -> pd.DataFrame:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_selic() -> pd.DataFrame:
-    """Taxa Selic meta — BCB série 432."""
     df = fetch_bcb_series(432, 60)
     if df.empty:
-        # fallback manual
         meses = pd.date_range("2022-01", periods=42, freq="MS")
         valores = (
             [10.75]*3 + [12.75]*3 + [13.25]*2 + [13.75]*5 +
@@ -354,10 +359,6 @@ def fetch_selic() -> pd.DataFrame:
 
 @st.cache_data(ttl=7200, show_spinner=False)
 def fetch_market_segments() -> pd.DataFrame:
-    """
-    Segmentos de atuação da Temon com TAM estimado.
-    Fontes: CBIC, ABINEE, Brasscom, dados setoriais 2024-2025.
-    """
     segs = {
         "Segmento": [
             "Instalacoes Eletricas",
@@ -382,10 +383,6 @@ def fetch_market_segments() -> pd.DataFrame:
 
 @st.cache_data(ttl=7200, show_spinner=False)
 def fetch_obras_historico() -> pd.DataFrame:
-    """
-    Portfólio histórico de obras Temon.
-    Fonte: temon.com.br, LinkedIn, comunicados de imprensa (>2000 obras totais).
-    """
     anos = list(range(2010, 2026))
     obras_acum = [
         350, 420, 510, 620, 730, 850, 980, 1100,
@@ -406,10 +403,6 @@ def fetch_obras_historico() -> pd.DataFrame:
 
 @st.cache_data(ttl=7200, show_spinner=False)
 def fetch_custo_insumos() -> pd.DataFrame:
-    """
-    Variação de custo de principais insumos da construção.
-    Fonte: SINAPI/IBGE, FGV/INCC desagregado 2024-2025.
-    """
     insumos = {
         "Insumo": ["Cobre (eletrico)", "Aco/Ferro", "PVC Hidraulico", "Cimento",
                    "Mao de Obra", "Equipamentos", "Fios e Cabos", "Tubulacoes"],
@@ -424,9 +417,6 @@ def fetch_custo_insumos() -> pd.DataFrame:
 
 @st.cache_data(ttl=7200, show_spinner=False)
 def fetch_regional_data() -> pd.DataFrame:
-    """
-    Construção civil por região.  Fonte: SINAPI regional IBGE dez/2025.
-    """
     regioes = {
         "Regiao": ["Sudeste", "Sul", "Nordeste", "Centro-Oeste", "Norte"],
         "Custo_m2": [1920, 1870, 1810, 1880, 1760],
@@ -437,13 +427,9 @@ def fetch_regional_data() -> pd.DataFrame:
     return pd.DataFrame(regioes)
 
 
-# ─── Previsões com ML ──────────────────────────────────────────────────────────
+# ─── Previsões ─────────────────────────────────────────────────────────────────
 
 def predict_arima_simple(series: pd.Series, n_forecast: int = 3) -> np.ndarray:
-    """
-    Previsao por media movel exponencial ponderada (ETS simplificado).
-    Nao requer statsmodels instalado — pura numpy.
-    """
     alpha = 0.3
     smoothed = series.values.copy().astype(float)
     for i in range(1, len(smoothed)):
@@ -455,19 +441,15 @@ def predict_arima_simple(series: pd.Series, n_forecast: int = 3) -> np.ndarray:
 
 
 def predict_linear_trend(x: np.ndarray, y: np.ndarray, x_future: np.ndarray) -> np.ndarray:
-    """Regressao linear simples com numpy."""
     coeffs = np.polyfit(x, y, 1)
     return np.polyval(coeffs, x_future)
 
 
 def predict_pib_forecast(df_pib: pd.DataFrame, anos_ahead: int = 3) -> pd.DataFrame:
-    """Previsao de PIB da construcao baseada em regressao + ajuste macro Selic."""
     anos = df_pib["ano"].values
     vals = df_pib["pib_var_pct"].values
     x_future = np.array([anos[-1] + i for i in range(1, anos_ahead + 1)])
-    # Regressao
     base = predict_linear_trend(anos, vals, x_future)
-    # Ajuste: Selic em 14.75% penaliza ~1.5 pp
     selic_penalty = 1.5
     forecast = base - selic_penalty + np.random.normal(0, 0.3, anos_ahead)
     forecast = np.clip(forecast, -2, 8)
@@ -479,12 +461,10 @@ def predict_pib_forecast(df_pib: pd.DataFrame, anos_ahead: int = 3) -> pd.DataFr
 
 
 def predict_sinapi_forecast(df: pd.DataFrame, n_months: int = 12) -> pd.DataFrame:
-    """Previsao do custo m2 SINAPI com tendencia + sazonalidade."""
     x = np.arange(len(df))
     y = df["custo_m2"].values
     fut_x = np.arange(len(df), len(df) + n_months)
     fut_vals = predict_linear_trend(x, y, fut_x)
-    # Sazonalidade leve (construcao aquece no 2o semestre)
     saz = np.array([np.sin(2 * np.pi * i / 12) * 15 for i in range(n_months)])
     fut_vals = fut_vals + saz
     datas = pd.date_range(df["periodo"].max() + pd.DateOffset(months=1), periods=n_months, freq="MS")
@@ -513,7 +493,7 @@ with st.sidebar:
         "Shopping Centers", "Industria e Galpoes", "Manutencao Predial",
     ])
     moeda = st.radio("Unidade Monetaria", ["BRL (R$)", "USD ($)"], horizontal=True)
-    usd_rate = 5.85  # referencia
+    usd_rate = 5.85
 
     st.markdown('<hr class="divider">', unsafe_allow_html=True)
     st.markdown('<div style="font-size:0.65rem;color:#6B7280;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.4rem;">Parametros de IA</div>', unsafe_allow_html=True)
@@ -565,9 +545,8 @@ if segmento != "Todos":
 else:
     df_segs_view = df_segs
 
-# Previsoes
 if show_forecast:
-    df_pib_fc   = predict_pib_forecast(df_pib, anos_ahead=forecast_horizon)
+    df_pib_fc    = predict_pib_forecast(df_pib, anos_ahead=forecast_horizon)
     df_sinapi_fc = predict_sinapi_forecast(df_sinapi, n_months=forecast_horizon * 12)
 else:
     df_pib_fc = pd.DataFrame()
@@ -584,11 +563,10 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Layout principal + calculadora
 main_col, calc_col = st.columns([3.2, 0.8])
 
 
-# ─── CALCULADORA (direita) ─────────────────────────────────────────────────────
+# ─── CALCULADORA ───────────────────────────────────────────────────────────────
 with calc_col:
     st.markdown('<div class="calc-box">', unsafe_allow_html=True)
     st.markdown('<div class="calc-title">Central de Calculo</div>', unsafe_allow_html=True)
@@ -654,7 +632,6 @@ with calc_col:
         prazo_m = st.number_input("Prazo (meses)", value=18, step=1)
         margem = (receita_ob - custo_ob) / receita_ob * 100 if receita_ob > 0 else 0
         roi = (receita_ob - custo_ob) / custo_ob * 100 if custo_ob > 0 else 0
-        payback = prazo_m / (roi / 100 + 0.001)
         cor = "#2ECC71" if margem > 10 else "#E74C3C"
         st.markdown(f'<div class="calc-result" style="color:{cor};">Margem: {margem:.1f}%<br>ROI: {roi:.1f}%</div>', unsafe_allow_html=True)
         if margem < 8:
@@ -675,9 +652,8 @@ with calc_col:
 # ─── CORPO PRINCIPAL ───────────────────────────────────────────────────────────
 with main_col:
 
-    # ─── KPIs GLOBAIS ──────────────────────────────────────────────────────────
+    # KPIs
     k1, k2, k3, k4, k5 = st.columns(5)
-
     kpis = [
         (k1, "Obras Totais", "2.000+", "+8% vs 2023", False),
         (k2, "Faturamento Est.", f"{sym}{int(500*fx)}M", "+30% (3 anos)", False),
@@ -695,9 +671,7 @@ with main_col:
             </div>
             """, unsafe_allow_html=True)
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # SECAO 1 — PIB DA CONSTRUCAO CIVIL
-    # ═══════════════════════════════════════════════════════════════════════════
+    # ── SECAO 1 — PIB ──────────────────────────────────────────────────────────
     st.markdown("""
     <div class="section-header">
         <div class="section-title">01 — Macroeconomia</div>
@@ -732,7 +706,6 @@ with main_col:
                          line=dict(color=COLORS["accent"], width=2.5),
                          marker=dict(size=6), name="PIB (Bi)")
         if show_forecast and not df_pib_fc.empty:
-            # Extrapola valor absoluto
             last_val = pib_brl.iloc[-1]
             last_growth = df_pib_fc["pib_var_pct"].values
             fut_vals = [last_val]
@@ -752,9 +725,7 @@ with main_col:
         fig2.update_layout(**PLOTLY_TEMPLATE, title=f"PIB Absoluto ({sym} Bilhoes)", height=300)
         st.plotly_chart(fig2, use_container_width=True)
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # SECAO 2 — CUSTOS DE CONSTRUCAO (SINAPI)
-    # ═══════════════════════════════════════════════════════════════════════════
+    # ── SECAO 2 — SINAPI ───────────────────────────────────────────────────────
     st.markdown("""
     <div class="section-header">
         <div class="section-title">02 — Custos</div>
@@ -800,9 +771,7 @@ with main_col:
                            xaxis_tickangle=-30)
         st.plotly_chart(fig4, use_container_width=True)
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # SECAO 3 — INCC E TAXAS MACRO
-    # ═══════════════════════════════════════════════════════════════════════════
+    # ── SECAO 3 — INCC E SELIC ─────────────────────────────────────────────────
     st.markdown("""
     <div class="section-header">
         <div class="section-title">03 — Indicadores Financeiros</div>
@@ -841,9 +810,7 @@ with main_col:
         else:
             st.info("Dados BCB indisponiveis no momento.")
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # SECAO 4 — MERCADO DE TRABALHO
-    # ═══════════════════════════════════════════════════════════════════════════
+    # ── SECAO 4 — EMPREGO ──────────────────────────────────────────────────────
     st.markdown("""
     <div class="section-header">
         <div class="section-title">04 — Mao de Obra</div>
@@ -883,9 +850,7 @@ with main_col:
         fig8.update_layout(**PLOTLY_TEMPLATE, title="Novas Vagas Criadas no Ano (mil) — CAGED", height=300)
         st.plotly_chart(fig8, use_container_width=True)
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # SECAO 5 — PORTFOLIO TEMON
-    # ═══════════════════════════════════════════════════════════════════════════
+    # ── SECAO 5 — PORTFOLIO TEMON ──────────────────────────────────────────────
     st.markdown("""
     <div class="section-header">
         <div class="section-title">05 — Portfolio Temon</div>
@@ -942,9 +907,7 @@ with main_col:
         fig10.update_layout(**PLOTLY_TEMPLATE, title=f"Receita Estimada Temon ({sym}M)", height=300)
         st.plotly_chart(fig10, use_container_width=True)
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # SECAO 6 — SEGMENTOS DE MERCADO
-    # ═══════════════════════════════════════════════════════════════════════════
+    # ── SECAO 6 — SEGMENTOS ────────────────────────────────────────────────────
     st.markdown("""
     <div class="section-header">
         <div class="section-title">06 — Segmentos</div>
@@ -988,9 +951,7 @@ with main_col:
                             height=320, xaxis_tickangle=-30)
         st.plotly_chart(fig12, use_container_width=True)
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # SECAO 7 — ANALISE REGIONAL
-    # ═══════════════════════════════════════════════════════════════════════════
+    # ── SECAO 7 — REGIONAL ─────────────────────────────────────────────────────
     st.markdown("""
     <div class="section-header">
         <div class="section-title">07 — Geografico</div>
@@ -1005,19 +966,25 @@ with main_col:
         if regiao != "Brasil (Consolidado)":
             df_r = df_r[df_r["Regiao"] == regiao]
         df_r["Custo_fx"] = df_r["Custo_m2"] * fx
+
+        # ── FIX: build layout dict merging PLOTLY_TEMPLATE to avoid duplicate yaxis key ──
+        layout_reg = dict(PLOTLY_TEMPLATE)
+        layout_reg.update({
+            "title": f"Custo m2 por Regiao ({sym}) + Variacao 2025",
+            "yaxis": dict(title=f"Custo {sym}/m2", gridcolor=COLORS["grid"]),
+            "yaxis2": dict(title="Variacao (%)", overlaying="y", side="right",
+                           gridcolor=COLORS["grid"]),
+            "barmode": "group",
+            "height": 320,
+        })
+
         fig13 = go.Figure(data=[
             go.Bar(name=f"Custo m2 ({sym})", x=df_r["Regiao"], y=df_r["Custo_fx"],
                    marker_color=COLORS["accent"]),
             go.Bar(name="Var 2025 (%)", x=df_r["Regiao"], y=df_r["Var_2025_pct"],
                    marker_color=COLORS["accent2"], yaxis="y2"),
         ])
-        fig13.update_layout(
-            **PLOTLY_TEMPLATE,
-            title=f"Custo m2 por Regiao ({sym}) + Variacao 2025",
-            yaxis=dict(title=f"Custo {sym}/m2", gridcolor=COLORS["grid"]),
-            yaxis2=dict(title="Variacao (%)", overlaying="y", side="right"),
-            barmode="group", height=320,
-        )
+        fig13.update_layout(**layout_reg)
         st.plotly_chart(fig13, use_container_width=True)
 
     with c7b:
@@ -1037,9 +1004,7 @@ with main_col:
         )
         st.plotly_chart(fig14, use_container_width=True)
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # SECAO 8 — DATA CENTERS E INFRAESTRUTURA DIGITAL
-    # ═══════════════════════════════════════════════════════════════════════════
+    # ── SECAO 8 — DATA CENTERS ─────────────────────────────────────────────────
     st.markdown("""
     <div class="section-header">
         <div class="section-title">08 — Segmento Estrategico</div>
@@ -1050,8 +1015,7 @@ with main_col:
 
     c8a, c8b = st.columns(2)
     with c8a:
-        anos_dc = list(range(2020, 2026 + forecast_horizon))
-        mw_hist = [180, 240, 330, 490, 640, 740]  # MW instalados (estimado)
+        mw_hist = [180, 240, 330, 490, 640, 740]
         mw_anos = list(range(2020, 2026))
         fig15 = go.Figure()
         fig15.add_scatter(x=mw_anos, y=[v * fx for v in mw_hist],
@@ -1068,13 +1032,11 @@ with main_col:
         st.plotly_chart(fig15, use_container_width=True)
 
     with c8b:
-        invest_dc = {"CloudHQ": 15.6, "Microsoft": 14.7, "Amazon": 9.2, "Google": 7.5,
-                     "Outros": 13.0}
+        invest_dc = {"CloudHQ": 15.6, "Microsoft": 14.7, "Amazon": 9.2, "Google": 7.5, "Outros": 13.0}
         fig16 = go.Figure(go.Bar(
             x=list(invest_dc.keys()),
             y=[v * fx for v in invest_dc.values()],
-            marker_color=[COLORS["accent"], COLORS["accent2"], COLORS["positive"],
-                          "#5B9BD5", COLORS["neutral"]],
+            marker_color=[COLORS["accent"], COLORS["accent2"], COLORS["positive"], "#5B9BD5", COLORS["neutral"]],
             text=[f"{sym}{v*fx:.1f}Bi" for v in invest_dc.values()],
             textposition="outside",
             textfont=dict(color=COLORS["text_primary"]),
@@ -1084,9 +1046,7 @@ with main_col:
                             height=310)
         st.plotly_chart(fig16, use_container_width=True)
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # SECAO 9 — PAINEL DE RISCO E MONITORAMENTO
-    # ═══════════════════════════════════════════════════════════════════════════
+    # ── SECAO 9 — RISCO ────────────────────────────────────────────────────────
     st.markdown("""
     <div class="section-header">
         <div class="section-title">09 — Gestao de Risco</div>
@@ -1097,18 +1057,16 @@ with main_col:
 
     c9a, c9b = st.columns(2)
     with c9a:
-        # Radar de riscos calculado dinamicamente
         selic_atual = 14.75
         incc_2025 = 5.63
-        emprego_cresc = 2.4  # %
+        emprego_cresc = 2.4
         pib_cc_2025 = 0.5
 
-        # Normaliza riscos (0=baixo, 10=alto)
-        risco_selic  = min(selic_atual / 1.8, 10)
-        risco_custo  = min(incc_2025 / 1.0, 10)
+        risco_selic   = min(selic_atual / 1.8, 10)
+        risco_custo   = min(incc_2025 / 1.0, 10)
         risco_emprego = max(10 - emprego_cresc * 2, 0)
-        risco_pib    = max(10 - pib_cc_2025 * 3, 2)
-        risco_cambio = 7.2
+        risco_pib     = max(10 - pib_cc_2025 * 3, 2)
+        risco_cambio  = 7.2
         risco_credito = min(selic_atual / 2.0, 10)
 
         categorias = ["Juros (Selic)", "Custo (INCC)", "Mao de Obra", "PIB Setorial", "Cambio", "Credito"]
@@ -1135,10 +1093,7 @@ with main_col:
         st.plotly_chart(fig17, use_container_width=True)
 
     with c9b:
-        # Mapa de calor de correlacoes (IA preditiva)
         fatores = ["Selic", "INCC", "USD/BRL", "PIB CC", "Emprego", "SINAPI"]
-        n = len(fatores)
-        np.random.seed(42)
         base_corr = np.array([
             [ 1.00, -0.72, -0.65,  0.82,  0.45, -0.68],
             [-0.72,  1.00,  0.55, -0.60, -0.30,  0.85],
@@ -1159,9 +1114,7 @@ with main_col:
         fig18.update_layout(**PLOTLY_TEMPLATE, title="Correlacao entre Indicadores (modelo IA)", height=340)
         st.plotly_chart(fig18, use_container_width=True)
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # SECAO 10 — PREVISOES PREDITIVAS IA
-    # ═══════════════════════════════════════════════════════════════════════════
+    # ── SECAO 10 — PREVISOES IA ────────────────────────────────────────────────
     st.markdown("""
     <div class="section-header">
         <div class="section-title">10 — Previsoes Preditivas</div>
@@ -1172,12 +1125,11 @@ with main_col:
 
     c10a, c10b = st.columns(2)
     with c10a:
-        # Cenario otimista / base / pessimista
         anos_fc2 = list(range(2025, 2025 + forecast_horizon + 1))
         base_rev = 500
-        receita_base_fc  = [base_rev * ((1.065) ** i) * fx for i in range(len(anos_fc2))]
-        receita_otim_fc  = [base_rev * ((1.10)  ** i) * fx for i in range(len(anos_fc2))]
-        receita_pess_fc  = [base_rev * ((1.02)  ** i) * fx for i in range(len(anos_fc2))]
+        receita_base_fc = [base_rev * ((1.065) ** i) * fx for i in range(len(anos_fc2))]
+        receita_otim_fc = [base_rev * ((1.10)  ** i) * fx for i in range(len(anos_fc2))]
+        receita_pess_fc = [base_rev * ((1.02)  ** i) * fx for i in range(len(anos_fc2))]
 
         fig19 = go.Figure()
         fig19.add_scatter(x=anos_fc2, y=receita_otim_fc, mode="lines",
@@ -1196,7 +1148,6 @@ with main_col:
         st.plotly_chart(fig19, use_container_width=True)
 
     with c10b:
-        # Score de oportunidade por segmento (IA)
         df_opp = df_segs.copy()
         df_opp["Score_IA"] = (
             df_opp["CAGR_pct"] * 0.4 +
@@ -1220,9 +1171,7 @@ with main_col:
                             height=320, xaxis=dict(title="Score (0-100)"))
         st.plotly_chart(fig20, use_container_width=True)
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # SECAO 11 — COMPARATIVO COMPETITIVO
-    # ═══════════════════════════════════════════════════════════════════════════
+    # ── SECAO 11 — COMPETITIVO ─────────────────────────────────────────────────
     st.markdown("""
     <div class="section-header">
         <div class="section-title">11 — Inteligencia Competitiva</div>
@@ -1290,9 +1239,7 @@ with main_col:
         )
         st.plotly_chart(fig22, use_container_width=True)
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # SECAO 12 — PAINEL DE SUSTENTABILIDADE E TECNOLOGIA
-    # ═══════════════════════════════════════════════════════════════════════════
+    # ── SECAO 12 — ESG ─────────────────────────────────────────────────────────
     st.markdown("""
     <div class="section-header">
         <div class="section-title">12 — ESG e Inovacao</div>
@@ -1338,9 +1285,7 @@ with main_col:
         fig24.update_layout(**PLOTLY_TEMPLATE, title="Indicadores ESG — Temon vs Meta 2026", height=320)
         st.plotly_chart(fig24, use_container_width=True)
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # SECAO 13 — MODELO DE PREVISAO AVANCADA IA
-    # ═══════════════════════════════════════════════════════════════════════════
+    # ── SECAO 13 — MODELO AVANCADO ─────────────────────────────────────────────
     st.markdown("""
     <div class="section-header">
         <div class="section-title">13 — Modelo Avancado de IA</div>
@@ -1351,12 +1296,11 @@ with main_col:
 
     c13a, c13b = st.columns(2)
     with c13a:
-        # Previsao de demanda por tipo de obra
         meses_hist = pd.date_range("2022-01", periods=42, freq="MS")
         np.random.seed(7)
-        base_eletrica = 100 + np.cumsum(np.random.normal(1.2, 3, 42))
-        base_hidraulica = 80  + np.cumsum(np.random.normal(0.8, 2.5, 42))
-        base_manutencao = 60  + np.cumsum(np.random.normal(0.9, 2, 42))
+        base_eletrica  = 100 + np.cumsum(np.random.normal(1.2, 3, 42))
+        base_hidraulica = 80 + np.cumsum(np.random.normal(0.8, 2.5, 42))
+        base_manutencao = 60 + np.cumsum(np.random.normal(0.9, 2, 42))
 
         fig25 = go.Figure()
         fig25.add_scatter(x=meses_hist, y=base_eletrica, mode="lines",
@@ -1370,7 +1314,7 @@ with main_col:
             n_fc_m = forecast_horizon * 12
             meses_fc = pd.date_range(meses_hist[-1] + pd.DateOffset(months=1), periods=n_fc_m, freq="MS")
             for base, cor, nome in [
-                (base_eletrica,  COLORS["accent"],   "Eletrica"),
+                (base_eletrica,   COLORS["accent"],   "Eletrica"),
                 (base_hidraulica, COLORS["accent2"],  "Hidraulica"),
                 (base_manutencao, COLORS["positive"], "Manutencao"),
             ]:
@@ -1383,14 +1327,14 @@ with main_col:
                     fig25.add_scatter(
                         x=list(meses_fc) + list(reversed(list(meses_fc))),
                         y=list(ub) + list(reversed(list(lb))),
-                        fill="toself", fillcolor=f"rgba({int(cor[1:3],16)},{int(cor[3:5],16)},{int(cor[5:7],16)},0.08)",
+                        fill="toself",
+                        fillcolor=f"rgba({int(cor[1:3],16)},{int(cor[3:5],16)},{int(cor[5:7],16)},0.08)",
                         line=dict(width=0), showlegend=False
                     )
         fig25.update_layout(**PLOTLY_TEMPLATE, title="Indice de Demanda por Tipo de Servico (IA)", height=330)
         st.plotly_chart(fig25, use_container_width=True)
 
     with c13b:
-        # Mapa de ciclo economico
         t = np.linspace(0, 4 * np.pi, 200)
         ciclo_pib    = 50 + 30 * np.sin(t) + np.random.normal(0, 2, 200)
         ciclo_constr = 50 + 28 * np.sin(t - 0.4) + np.random.normal(0, 2, 200)
@@ -1411,9 +1355,7 @@ with main_col:
                             height=330)
         st.plotly_chart(fig26, use_container_width=True)
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # RODAPE
-    # ═══════════════════════════════════════════════════════════════════════════
+    # ── RODAPE ─────────────────────────────────────────────────────────────────
     st.markdown('<hr class="divider">', unsafe_allow_html=True)
     st.markdown(f"""
     <div style="display:flex;justify-content:space-between;align-items:center;
