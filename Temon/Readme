@@ -1,0 +1,150 @@
+# TEMON Intelligence Dashboard — Documentacao Tecnica
+
+## Visao Geral
+
+Painel de inteligencia de mercado construido com Streamlit para o Grupo Temon,
+empresa brasileira lider em instalacoes eletricas, hidraulicas e manutencao predial
+desde 1978 (mais de 2.000 obras em todo o Brasil).
+
+---
+
+## Arquitetura
+
+```
+temon_app/
+├── app.py           # Aplicacao principal Streamlit
+├── requirements.txt # Dependencias Python
+├── README.md        # Esta documentacao
+└── .streamlit/
+    └── config.toml  # Configuracao do servidor
+```
+
+---
+
+## Fontes de Dados (Knowledge Bases)
+
+| Fonte | Tipo | Endpoint |
+|-------|------|----------|
+| IBGE/SINAPI | API REST publica | servicodados.ibge.gov.br |
+| Banco Central (SGS) | API REST publica | api.bcb.gov.br |
+| CBIC (boletins) | Dados curados | cbic.org.br |
+| FGV/INCC-DI | Dados curados | fgv.br |
+| ABINEE | Relatorios setoriais | abinee.org.br |
+| Brasscom | Data Centers | brasscom.org.br |
+| Temon (publico) | Site + imprensa | temon.com.br |
+
+Nenhum dado e hard-coded de forma arbitraria — todos os numeros possuem
+referencia a publicacoes publicas verificaveis listadas acima.
+
+---
+
+## Seguranca
+
+- **Rate limiting**: maximo 30 requisicoes/minuto para APIs externas
+- **Sanitizacao de inputs**: funcao `_sanitize()` remove `< > " ' ; & `
+- **Sem secrets expostos**: nenhuma chave de API necessaria (todos endpoints publicos)
+- **Cache seguro**: `st.cache_data` com TTL (3600s para mercado, 7200s para historico)
+- **Sem execucao de codigo dinamico**: nenhum `eval()` ou `exec()`
+- **Fallback de dados**: todos os fetches externos possuem fallback local com dados verificados
+
+---
+
+## Modelos de IA / Previsao
+
+### 1. ETS (Exponential Smoothing) — `predict_arima_simple()`
+- Aplicacao: Custo SINAPI, demanda por tipo de servico
+- Alpha: 0.3 (suavizacao moderada)
+
+### 2. Regressao Linear — `predict_linear_trend()`
+- Aplicacao: PIB, emprego, obras acumuladas, receita
+- Ajuste: penalizacao por Selic para PIB da construcao
+
+### 3. CAGR Projetado — segmentos de mercado
+- Aplicacao: TAM por segmento, market share Temon
+- Fonte de CAGR: dados setoriais ABINEE/Brasscom/CBIC
+
+### 4. Cenarios (Otimista / Base / Pessimista) — receita Temon
+- Otimista: +10%/ano | Base: +6,5%/ano | Pessimista: +2%/ano
+
+### 5. Score de Oportunidade (modelo composto)
+- Formula: `CAGR * 0.4 + TAM_norm * 30 + (10 - participacao) * 1.5`
+
+### 6. Radar de Risco (dinamico)
+- Inputs: Selic, INCC, crescimento de emprego, PIB setorial, cambio, credito
+- Normalizados em escala 0-10
+
+### 7. Matriz de Correlacao
+- Calculo sobre indicadores macroeconomicos historicos
+
+### 8. Modelo de Ciclo Economico
+- Defasagem temporal entre ciclo PIB e construcao (aprox. 5-8 meses)
+
+---
+
+## Filtros Globais (PowerBI-style)
+
+| Filtro | Escopo |
+|--------|--------|
+| Intervalo de Anos | Todos os graficos historicos |
+| Regiao de Foco | Secao geografica |
+| Segmento de Atuacao | TAM e market share |
+| Unidade Monetaria | BRL / USD (FX: R$5,85) |
+| Previsoes preditivas | Toggle global |
+| Horizonte de previsao | 1-5 anos, todos os modelos |
+| Bandas de confianca 95% | Graficos de previsao |
+
+---
+
+## Calculadoras
+
+1. **Custo por m2 (SINAPI)** — base dez/2025 R$1.891,63/m2
+2. **Orcamento Eletrico** — por tipo de edificacao
+3. **Orcamento Hidraulico** — por sistema
+4. **BDI** — Beneficios e Despesas Indiretas
+5. **Reajuste por INCC** — INCC 2025 = 5,63%
+6. **Viabilidade de Obra** — margem + ROI
+7. **Previsao de Receita** — projecao composta
+
+---
+
+## Deploy (Streamlit Cloud)
+
+1. Fork/clone este repositorio
+2. Acesse share.streamlit.io
+3. Conecte seu GitHub
+4. Aponte para `app.py`
+5. Nenhuma variavel de ambiente necessaria
+
+### Execucao local
+
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+---
+
+## Secoes do Dashboard
+
+| # | Secao | Visualizacoes |
+|---|-------|---------------|
+| 01 | PIB da Construcao Civil | Barras variacao + linha absoluto |
+| 02 | Custos SINAPI | Linha custo m2 + barras insumos |
+| 03 | INCC e Selic | Duplo eixo INCC/Selic + Selic historico BCB |
+| 04 | Mercado de Trabalho | Emprego formal + vagas CAGED |
+| 05 | Portfolio Temon | Obras/ano + receita estimada |
+| 06 | Segmentos | Treemap TAM + market share |
+| 07 | Analise Regional | Custo regional + pizza por regiao |
+| 08 | Data Centers | Capacidade MW + investimentos |
+| 09 | Gestao de Risco | Radar de risco + heatmap correlacoes |
+| 10 | Previsoes IA | Cenarios de receita + score oportunidade |
+| 11 | Competitivo | Scatter concorrentes + radar benchmarking |
+| 12 | ESG e Inovacao | Adocao tecnologica + indicadores ESG |
+| 13 | Modelo Avancado | Demanda por servico + ciclo economico |
+
+---
+
+## Licenca e Uso
+
+Uso interno corporativo — Grupo Temon.
+Dados publicos conforme licencas originais de cada fonte (IBGE: CC BY 4.0, BCB: dados abertos).
